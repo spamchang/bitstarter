@@ -1,25 +1,4 @@
 #!/usr/bin/env node
-/*
-Automatically grade files for the presence of specified HTML tags/attributes.
-Uses commander.js and cheerio. Teaches command line application development
-and basic DOM parsing.
-
-References:
-
- + cheerio
-   - https://github.com/MatthewMueller/cheerio
-   - http://encosia.com/cheerio-faster-windows-friendly-alternative-jsdom/
-   - http://maxogden.com/scraping-with-node.html
-
- + commander.js
-   - https://github.com/visionmedia/commander.js
-   - http://tjholowaychuk.com/post/9103188408/commander-js-nodejs-command-line-interfaces-made-easy
-
- + JSON
-   - http://en.wikipedia.org/wiki/JSON
-   - https://developer.mozilla.org/en-US/docs/JSON
-   - https://developer.mozilla.org/en-US/docs/JSON#JSON_in_Firefox_2
-*/
 
 var fs = require('fs');
 var program = require('commander');
@@ -28,13 +7,38 @@ var res = require('restler');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
 
-var assertURLExists = function(inURL) {
-    res.get(inURL).on('complete', function(result) {
+var processURL = function(inUrl,checksfile) {
+	res.get(inUrl).on('complete',function(result,checksfile) {
+		if (result instanceof Error) {
+			console.log("Error retrieving URL");
+			console.log(Error);
+			process.exit(1);
+		}
+		console.log("url result: " + result);
+	});
+};
+
+var assertURLExists = function(inURL,checksfile) {
+    console.log("begin assertURL fn on " + inURL);
+    res.get(inURL).on('complete', function(result,checksfile) {
         if (result instanceof Error) {
             console.log("Error retrieving URL");
+            console.log(Error);
             process.exit(1);
+        } else {
+	    $ = cheerio.load(result);
+	    var checks = loadChecks(checksfile).sort();
+	    var out = {};
+	    for (var ii in checks) {
+		var presents = $(checks[ii]).length > 0;
+		out[checks[ii]] = present;
+	    }
+	    var outJson = JSON.stringify(out,null,4);
+	    console.log(outJson);
+            console.log("did we fetch a URL?");
         }
       });
+    console.log("exiting assertURL fn");
 };
 
 var assertFileExists = function(infile) {
@@ -73,7 +77,8 @@ var clone = function(fn) {
 
 var getURLFile = function(inURL) {
 	res.get(inURL).on('complete',function(data) {
-		return cheerio.load(data);
+		program.file = "url.html";
+		fs.writeFileSync(program.file,cheerio.load(data));
 	});
 };
 
@@ -81,32 +86,31 @@ if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
-	.option('-u, --url [URL]', 'Path to URL (takes precedence over file)')
+	.option('-u, --url [URL]', 'Path to URL (optional; takes precedence over file)')
         .parse(process.argv);
 
 
     if (program.url) {
+        if( typeof(program.url) != "string") {
+	    console.log("error: URL is a "+typeof(program.url)+". URL must be a string.");
+	    process.exit(1);
+	}
+        assertURLExists(program.url,program.checks);
+//	processURL(program.url,program.checks);
+	console.log("done with assertURLexists");
 
-        console.log(program.file + " " + HTMLFILE_DEFAULT);
-        console.log(program.url);
-
-        assertURLExists(program.url);
-	
-	var URLfile = getURLFile(program.url);
-
-//        var checkJson = checkHtmlURL(URLfile, program.checks);
+//        getURLFile(program.url);
+//        var checkJson = checkHtmlFile(program.file, program.checks);
 //        var outJson = JSON.stringify(checkJson, null, 4);
 //        console.log(outJson);
 	console.log("URL");
 	console.log(program.url);
-	process.exit(1);
+//        process.exit(1);
     } else if (program.file) {
-        console.log(program.file + " " + HTMLFILE_DEFAULT);
-
         var checkJson = checkHtmlFile(program.file, program.checks);
         var outJson = JSON.stringify(checkJson, null, 4);
         console.log(outJson);
-	process.exit(1);
+//        process.exit(1);
     }
 } else {
     exports.checkHtmlFile = checkHtmlFile;
